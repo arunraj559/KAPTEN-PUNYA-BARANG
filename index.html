@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dashboard Saldo — Premium Dark</title>
+
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+
+<style>
+:root{
+--bg:#0d0d0d;
+--card:#1a1a1a;
+--muted:#bfa76a;
+--accent:#c9a94d;
+--danger:#ff4444;
+--success:#22cc88;
+--gold:#d4af37;
+}
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui; margin:0; background:var(--bg); color:var(--gold);}
+.container{max-width:1200px;margin:28px auto;padding:20px;}
+header.top{display:flex;align-items:center;gap:16px;margin-bottom:18px;}
+
+
+.logo img{width:64px;height:64px;object-fit:contain;border-radius:8px;box-shadow:0 0 18px rgba(212,175,55,0.3)}
+.title{font-size:20px;font-weight:700;color:var(--gold)}
+.subtitle{font-size:13px;color:var(--muted)}
+
+
+.controls{display:flex;gap:12px;margin-left:auto;align-items:center;}
+select,input[type="search"]{padding:10px 12px;border-radius:10px;border:1px solid var(--gold);background:#111;color:var(--gold);}
+.btn{background:var(--gold);color:#111;padding:10px 14px;border-radius:10px;border:0;font-weight:600;cursor:pointer;}
+.btnEdit{background:#333;color:var(--gold);border:1px solid var(--gold);padding:6px 10px;border-radius:6px;cursor:pointer;}
+
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:20px}
+.card{grid-column:span 4;background:var(--card);padding:18px;border-radius:12px;box-shadow:0 0 20px rgba(212,175,55,0.08)}
+.card.big{grid-column:span 8}
+.card h3{margin:0;font-size:14px;color:var(--gold);font-weight:700}
+.card .value{font-size:24px;font-weight:700;margin-top:10px;color:var(--gold)}
+.small{font-size:12px;color:var(--muted)}
+
+
+.table-card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 0 20px rgba(212,175,55,0.08)}
+table{width:100%;border-collapse:collapse;margin-top:10px;color:var(--gold)}
+thead th{font-size:12px;text-align:left;padding:10px;border-bottom:1px solid #444;color:var(--gold)}
+tbody td{padding:12px;border-bottom:1px dashed #333}
+tbody tr:hover{background:#222}
+
+
+.pill{padding:6px 10px;border-radius:999px;font-weight:700;font-size:12px;display:inline-block}
+.pill.danger{background:#331111;color:#ff7777;border:1px solid #ff4444}
+.pill.ok{background:#113322;color:#33dd88;border:1px solid #22cc88}
+
+  /* popup / toast */
+  .toast {
+    position:fixed; right:20px; bottom:20px; background:linear-gradient(180deg,#fff0f0,#ffecec); color:var(--danger);
+    border-left:6px solid var(--danger); padding:14px 16px; border-radius:10px; box-shadow:0 10px 30px rgba(2,6,23,0.08);
+    display:none; z-index:9999; max-width:360px;
+  }
+  .toast h4{margin:0;font-size:14px}
+  .toast p{margin:6px 0 0;font-size:13px;color:#3b3b3b}
+
+  /* responsive */
+  @media (max-width:900px){
+    .grid{grid-template-columns:repeat(6,1fr)}
+    .card{grid-column:span 6}
+    .card.big{grid-column:span 6}
+    .controls{flex-wrap:wrap;gap:8px}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="top">
+      <div class="logo">
+        <!-- logo external yang kamu kirim -->
+        <img src="https://tvtoto80242.com/resources/images/logo.png" alt="Logo">
+        <div>
+          <div class="title">𝐃𝐀𝐒𝐇𝐁𝐎𝐀𝐑𝐃 𝐒𝐀𝐋𝐃𝐎 𝐊𝐀𝐏𝐓𝐄𝐍</div>
+          <div class="subtitle">Realtime monitoring & alert — otomatis mengikuti Sheet2</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <input id="search" type="search" placeholder="Cari nama atau rekening..." />
+        <select id="viewFilter" title="Filter status">
+          <option value="all">Tampilkan Semua</option>
+          <option value="on">Hanya ON</option>
+        </select>
+        <select id="sortOpt" title="Sort">
+          <option value="priority">Sort: Prioritas (saldo mau habis)</option>
+          <option value="saldoAsc">Sort: Saldo naik</option>
+          <option value="saldoDesc">Sort: Saldo turun</option>
+        </select>
+        <button class="btn" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="card big">
+        <h3>Total Saldo Aktif</h3>
+        <div class="value" id="totalSaldo">—</div>
+        <div class="small">Jumlah rekening aktif &gt; 0 ditampilkan</div>
+      </div>
+
+      <div class="card">
+        <h3>Saldo Mau Habis</h3>
+        <div class="value" id="countLow">0</div>
+        <div class="small">Saldo ≤ Rp 2.000.000</div>
+      </div>
+
+      <div class="card">
+        <h3>Rekening Aktif</h3>
+        <div class="value" id="countOn">0</div>
+        <div class="small">Dibaca dari kolom D = "ON"</div>
+      </div>
+
+      <div style="grid-column:span 12;" class="table-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">𝐃𝐀𝐓𝐀 𝐑𝐄𝐊𝐄𝐍𝐈𝐍𝐆 𝐁𝐀𝐍𝐊 𝐖𝐈𝐓𝐇𝐃𝐑𝐀𝐖 𝐓𝐕𝐓𝐎𝐓𝐎</h3>
+          <div class="small">Data otomatis mengikuti Google Sheet</div>
+        </div>
+
+        <table id="tbl">
+          <thead>
+            <tr>
+              <th style="width:36%">Nama Rekening</th>
+              <th style="width:18%">Saldo</th>
+              <th style="width:22%">No. Rekening (kolom C)</th>
+              <th style="width:18%">Status</th>
+              <th style="width:6%">Aksi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <div style="margin-top:12px" class="small">Tip: Klik tombol "Edit" untuk mengisi/override Nomor Rekening (disimpan di browser).</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- toast -->
+  <div id="toast" class="toast"></div>
+
+<script>
+/* ====== CONFIG - isi LOCAL saja (JANGAN SHARE API KEY) ======
+   - Ganti API_KEY & SPREADSHEET_ID di komputer lokalmu sebelum pakai.
+   - LOCAL_XLSX_PATH disertakan untuk fallback/keperluan lokal (tool internal akan ubah path jadi URL bila perlu).
+*/
+const API_KEY = "AIzaSyDCHy6x2rebgFUgBmJWZmWXkhw1lupJStE";    // <-- paste API key di lokal
+const SPREADSHEET_ID = "1rkGN7U659qbpUfNA0pz-IsDvDLvgpOqm4XXoB8BmieI";
+const SHEET_NAME = "Sheet2";
+const RANGE = `${SHEET_NAME}!A1:D999`;
+const REFRESH_MS = 5000;
+const THRESHOLD = 2000000;
+
+// lokal path (yang kamu upload sebelumnya). Tool/hosting akan transform menjadi URL bila perlu.
+const LOCAL_XLSX_PATH = "/mnt/data/SCATTER.xlsx";
+
+/* ====== HELPERS ====== */
+function fmtIDR(n){ return 'Rp ' + Number(n).toLocaleString('id-ID'); }
+function parseNumber(v){ if(v==null) return 0; const s = String(v).replace(/[^0-9\-]/g,''); const n = Number(s); return isNaN(n)?0:n; }
+function showToast(title, msg, timeout=5000){
+  const t = document.getElementById('toast');
+  t.innerHTML = `<h4>${title}</h4><p>${msg}</p>`;
+  t.style.display = 'block';
+  setTimeout(()=> t.style.display = 'none', timeout);
+}
+
+/* ====== local override storage (simpan nomor rekening yang diedit) ====== */
+const LS_KEY = 'kapten_rek_override_v1';
+function loadOverrides(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch(e){return{}} }
+function saveOverrides(obj){ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }
+
+/* ====== RENDER LOGIC ====== */
+async function fetchSheetValues(){
+  // jika API_KEY belum di-set, kita fallback ke local xlsx path (NOTA: browser cannot read xlsx without server; this path is for system tooling)
+  if(!API_KEY || API_KEY.includes('PUT_YOUR')) {
+    console.warn('API_KEY not set — dashboard expects local/testing mode or set API key.');
+    throw new Error('API key belum dimasukkan. Isi API_KEY di file HTML ini untuk mode online.');
+  }
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(RANGE)}?key=${API_KEY}`;
+  const res = await fetch(url);
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error('HTTP '+res.status+': '+txt);
+  }
+  const json = await res.json();
+  return json.values || [];
+}
+
+async function render(){
+  try {
+    const values = await fetchSheetValues();
+
+    // parse rows: header possible in row 0
+    const overrides = loadOverrides();
+    const rows = [];
+
+    for(let i=0;i<values.length;i++){
+      if(i===0) {
+        // treat first row as header if contains non numeric
+        // but we still process; skip if empty header
+        const isHeader = values[0].some(c => typeof c === 'string' && /[A-Za-z]/.test(c));
+        if(isHeader) continue;
+      }
+    }
+
+    // process actual data rows (we will iterate raw but skip header heuristically)
+    for(let r=1; r<values.length; r++){
+      const row = values[r];
+      if(!row) continue;
+      const nama = (row[0]||'').trim();
+      const saldoRaw = row[1] || '';
+      const noRek = row[2] || '';
+      const flag = (row[3]||'').toString().trim().toUpperCase();
+
+      // rules:
+      // - only show if flag === 'ON'
+      if(flag !== 'ON') continue;
+
+      // - name must include 'WD' (case-insensitive)
+      if(!nama.toUpperCase().includes('WD')) continue;
+
+      // - hide names containing 'BANK KAS'
+      if(nama.toUpperCase().includes('BANK KAS')) continue;
+
+      const saldo = parseNumber(saldoRaw);
+      // ignore zero or negative
+      if(saldo <= 0) continue;
+
+      // apply override for nomor rekening if present
+      const overrideKey = nama; // use name as key (you can change to other unique id)
+      const overrideRek = (overrides[overrideKey] || '').toString().trim();
+      const finalRek = overrideRek || noRek || '-';
+
+      rows.push({
+        nama, saldo, rekening: finalRek, rawRek: noRek, flag
+      });
+    }
+
+    // sort: warn on top, then ascending saldo
+    rows.sort((a,b)=>{
+      const aWarn = a.saldo <= THRESHOLD;
+      const bWarn = b.saldo <= THRESHOLD;
+      if(aWarn && !bWarn) return -1;
+      if(!aWarn && bWarn) return 1;
+      return a.saldo - b.saldo;
+    });
+
+    // filtering: search and viewFilter
+    const q = (document.getElementById('search').value||'').toLowerCase();
+    const view = document.getElementById('viewFilter').value;
+    const sortOpt = document.getElementById('sortOpt').value;
+
+    let filtered = rows.filter(r=>{
+      if(view === 'on' && r.flag !== 'ON') return false; // redundant but safe
+      if(q){
+        return (r.nama + ' ' + r.rekening).toLowerCase().includes(q);
+      }
+      return true;
+    });
+
+    // additional sort options
+    if(sortOpt === 'saldoAsc') filtered.sort((a,b)=>a.saldo-b.saldo);
+    if(sortOpt === 'saldoDesc') filtered.sort((a,b)=>b.saldo-a.saldo);
+    // else priority already set
+
+    // compute totals
+    const totalSaldo = filtered.reduce((s, x)=> s + x.saldo, 0);
+    const countLow = filtered.filter(x=>x.saldo <= THRESHOLD).length;
+    const countOn = filtered.length;
+
+    // render table rows
+    const tbody = document.querySelector('#tbl tbody');
+    tbody.innerHTML = '';
+    filtered.forEach(item=>{
+      const tr = document.createElement('tr');
+      if(item.saldo <= THRESHOLD) tr.style.background = '#fff5f5';
+      tr.innerHTML = `
+        <td>${item.nama}</td>
+        <td>${fmtIDR(item.saldo)}</td>
+        <td>${item.rekening}</td>
+        <td>${item.saldo <= THRESHOLD ? '<span class="pill danger">SALDO MAU HABIS</span>' : '<span class="pill ok">AMAN</span>'}</td>
+        <td><button class="btnEdit" data-name="${item.nama}">Edit</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('totalSaldo').textContent = fmtIDR(totalSaldo);
+    document.getElementById('countLow').textContent = countLow;
+    document.getElementById('countOn').textContent = countOn;
+
+    // show popup if there are critical accounts
+    if(countLow > 0){
+      showToast('SALDO MAU HABIS', `${countLow} akun perlu top-up. Klik lihat di tabel.`, 7000);
+    }
+
+    // wire edit buttons
+    document.querySelectorAll('.btnEdit').forEach(btn=>{
+      btn.onclick = function(){
+        const name = this.dataset.name;
+        const overrides = loadOverrides();
+        const current = overrides[name] || '';
+        const newVal = prompt('Isi / ganti nomor rekening untuk: ' + name, current);
+        if(newVal !== null){
+          overrides[name] = newVal.trim();
+          saveOverrides(overrides);
+          render(); // rerender with override
+        }
+      };
+    });
+
+  } catch(err){
+    console.error(err);
+    // show friendly message
+    document.getElementById('tbl').querySelector('tbody').innerHTML = '<tr><td colspan="5" style="color:#b32626">Error: '+err.message+'</td></tr>';
+    showToast('Error', err.message, 6000);
+  }
+}
+
+/* events */
+document.getElementById('refreshBtn').addEventListener('click', ()=> render());
+document.getElementById('search').addEventListener('input', ()=> render());
+document.getElementById('viewFilter').addEventListener('change', ()=> render());
+document.getElementById('sortOpt').addEventListener('change', ()=> render());
+
+/* initial */
+render();
+setInterval(render, REFRESH_MS);
+
+</script>
+</body>
+</html>
