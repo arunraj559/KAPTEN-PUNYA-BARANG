@@ -655,12 +655,27 @@ tbody tr.row-off{
     </div>
   </div>
 
+  <div class="modal-overlay" id="transferModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title" id="transferTitle">💳 REKENING KAS UNTUK TRANSFER</div>
+        <button class="modal-close" id="transferClose">&times;</button>
+      </div>
+      <div style="max-height: 400px; overflow-y: auto;">
+        <div id="transferList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-modal" id="transferCloseBtnFooter">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
   <div class="container">
     <header class="top">
       <div class="logo-title">𝐃𝐀𝐒𝐇𝐁𝐎𝐀𝐑𝐃 𝐒𝐀𝐋𝐃𝐎 𝐊𝐀𝐏𝐓𝐄𝐍</div>
-      <div class="subtitle"></div>
+      <div class="subtitle">Premium Holographic Edition — 101 Rekening WD (15 Kotor + 86 Bersih)</div>
 
       <div class="controls">
         <input id="search" type="search" class="glass-input" placeholder="🔍 Cari nama atau rekening..." />
@@ -672,9 +687,15 @@ tbody tr.row-off{
         </select>
 
         <select id="wdFilter" class="glass-select">
-          <option value="all">Tampilkan Semua</option>
+          <option value="all">Semua WD</option>
           <option value="kotor">WD Kotor (15)</option>
           <option value="bersih">WD Bersih (86)</option>
+        </select>
+
+        <select id="kasFilter" class="glass-select" style="display:none;">
+          <option value="all">Semua KAS</option>
+          <option value="kotor">KAS Kotor</option>
+          <option value="bersih">KAS Bersih</option>
         </select>
 
         <select id="viewFilter" class="glass-select">
@@ -689,9 +710,9 @@ tbody tr.row-off{
 
     <section class="summary-grid">
       <div class="card big success">
-        <div class="card-title">Total Saldo Aktif</div>
+        <div class="card-title" id="totalSaldoTitle">Total Saldo Aktif</div>
         <div class="card-value" id="totalSaldo">Rp 0</div>
-        <div class="card-subtitle">Rekening ON </div>
+        <div class="card-subtitle">Rekening ON saja</div>
       </div>
 
       <div class="card small" id="cardNegative" style="display:none">
@@ -761,11 +782,26 @@ const SHEET_NAME = "Sheet2";
 const RANGE = `${SHEET_NAME}!A1:E999`;
 
 const WD_KOTOR_NAMES = [
-  "WD BCA G1", "WD BCA G2", "WD BCA G3", "WD BCA G4", "WD BCA G5",
-  "WD BCA G6", "WD BCA G7", "WD BCA G8", "WD BCA G9", "WD BCA G10",
-  "WD BRI G1", "WD BRI G2",
-  "WD CIMB G1", "WD CIMB G2",
-  "BANK WD DANAMON G1"
+  // BCA G1-G10
+  "INDRA SEPTIAN", "LILIS ERNAWATI", "FARIS IMAM BUCHORI", "AMELIA WATI WIBISONO", "BOBI SAPUTRA",
+  "TJONG ARIH", "SHERLY", "KUSNADI", "RATMI", "ALI NURDIN",
+  // BRI G1-G2
+  "PRIYO ARYATNO", "ARI ROMAYANTI",
+  // CIMB G1-G2
+  "ROSIDA", "IKAL BUDIAWAN",
+  // DANAMON G1
+  "ADRIL YANSAH"
+];
+
+const KAS_KOTOR_NAMES = [
+  "BANK KAS LAMA KECIL KOTOR BCA G1",
+  "BANK KAS LAMA KECIL KOTOR BCA G2",
+  "BANK KAS LAMA KECIL KOTOR BRI G1",
+  "BANK KAS BESAR BCA KOTOR G3",
+  "BANK KAS BESAR BCA KOTOR G4",
+  "BANK KAS BESAR BCA KOTOR G5",
+  "BANK KAS BESAR BCA KOTOR G6",
+  "BANK KAS KOTOR DANAMON"
 ];
 
 let allAccounts = [];
@@ -794,6 +830,10 @@ function parseNumber(v){
 
 function isWdKotor(name){
   return WD_KOTOR_NAMES.some(kotor => name.toUpperCase().includes(kotor));
+}
+
+function isKasKotor(name){
+  return KAS_KOTOR_NAMES.some(kotor => name.toUpperCase().includes(kotor));
 }
 
 async function fetchSheetValues(){
@@ -837,6 +877,70 @@ function closeEditModal(){
 
 function closeAlertModal(){
   document.getElementById('alertModal').classList.remove('active');
+}
+
+function closeTransferModal(){
+  document.getElementById('transferModal').classList.remove('active');
+}
+
+function openTransferModal(kasType){
+  // Filter KAS accounts by type
+  const kasAccounts = allAccounts.filter(a => 
+    a.accountType === 'KAS' && 
+    a.kasType?.toUpperCase() === kasType?.toUpperCase() &&
+    a.keterangan === 'ON'
+  );
+
+  // Sort by saldo descending (highest first)
+  const sorted = kasAccounts.sort((a, b) => b.saldo - a.saldo);
+
+  // Calculate total saldo
+  const totalSaldo = sorted.reduce((sum, a) => sum + a.saldo, 0);
+
+  // Update modal title
+  const typeLabel = kasType === 'KOTOR' ? 'KAS KOTOR' : 'KAS BERSIH';
+  document.getElementById('transferTitle').textContent = `💳 REKENING ${typeLabel} - UNTUK TRANSFER`;
+
+  // Populate transfer list
+  const transferList = document.getElementById('transferList');
+  transferList.innerHTML = '';
+
+  // Add total saldo card
+  const totalCard = document.createElement('div');
+  totalCard.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 2px solid rgba(255, 215, 0, 0.4); border-radius: 10px; padding: 16px; margin-bottom: 16px; text-align: center;';
+  totalCard.innerHTML = `
+    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">TOTAL SALDO ${typeLabel}</div>
+    <div style="font-family:'Exo 2',sans-serif; font-size: 24px; font-weight: 800; color: var(--warning);">${fmtIDR(totalSaldo)}</div>
+  `;
+  transferList.appendChild(totalCard);
+
+  // Add divider
+  const divider = document.createElement('div');
+  divider.style.cssText = 'height: 1px; background: rgba(255, 68, 68, 0.2); margin: 12px 0;';
+  transferList.appendChild(divider);
+
+  // Add KAS accounts
+  if(sorted.length === 0){
+    const emptyMsg = document.createElement('div');
+    emptyMsg.style.cssText = 'text-align: center; padding: 20px; color: var(--text-muted);';
+    emptyMsg.textContent = `Tidak ada rekening ${typeLabel} aktif`;
+    transferList.appendChild(emptyMsg);
+  } else {
+    sorted.forEach(acc => {
+      const item = document.createElement('div');
+      item.style.cssText = 'background: rgba(34, 204, 136, 0.1); border: 1px solid rgba(34, 204, 136, 0.3); border-radius: 10px; padding: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;';
+      item.innerHTML = `
+        <div>
+          <div style="font-weight: 800; color: var(--text); margin-bottom: 4px;">${acc.nama}</div>
+          <div style="font-family: monospace; font-size: 12px; color: var(--text-muted);">${acc.rekening}</div>
+        </div>
+        <div style="font-family:'Exo 2',sans-serif; font-size: 16px; font-weight: 800; color: var(--success); text-align: right;">${fmtIDR(acc.saldo)}</div>
+      `;
+      transferList.appendChild(item);
+    });
+  }
+
+  document.getElementById('transferModal').classList.add('active');
 }
 
 function showAlertModal(negativeAccounts, lowWdAccounts){
@@ -904,8 +1008,14 @@ async function render(){
       const accountType = isKas ? 'KAS' : isWd ? 'WD' : 'OTHER';
       
       let wdType = null;
+      let kasType = null;
+      
       if(accountType === 'WD'){
         wdType = isWdKotor(nama) ? 'KOTOR' : 'BERSIH';
+      }
+      
+      if(accountType === 'KAS'){
+        kasType = isKasKotor(nama) ? 'KOTOR' : 'BERSIH';
       }
 
       allAccounts.push({
@@ -916,13 +1026,49 @@ async function render(){
         biaya,
         accountType,
         wdType,
+        kasType,
       });
     }
 
     const q = (document.getElementById('search').value||'').toLowerCase();
     const accountType = document.getElementById('accountType').value;
     const wdFilter = document.getElementById('wdFilter').value;
+    const kasFilter = document.getElementById('kasFilter').value;
     const viewFilter = document.getElementById('viewFilter').value;
+    
+    // Show/hide kasFilter dropdown based on accountType
+    document.getElementById('kasFilter').style.display = accountType === 'kas' ? 'block' : 'none';
+    document.getElementById('wdFilter').style.display = accountType === 'wd' ? 'block' : 'none';
+
+    // Calculate total saldo based on filters
+    let totalAccounts = allAccounts.filter(a => a.keterangan === 'ON');
+    
+    if(accountType === 'wd'){
+      totalAccounts = totalAccounts.filter(a => a.accountType === 'WD');
+      if(wdFilter !== 'all'){
+        totalAccounts = totalAccounts.filter(a => a.wdType?.toLowerCase() === wdFilter);
+      }
+    } else if(accountType === 'kas'){
+      totalAccounts = totalAccounts.filter(a => a.accountType === 'KAS');
+      if(kasFilter !== 'all'){
+        totalAccounts = totalAccounts.filter(a => a.kasType?.toLowerCase() === kasFilter);
+      }
+    }
+    
+    const totalSaldo = totalAccounts.reduce((s,a)=>s+a.saldo, 0);
+    
+    // Update card title
+    let cardTitle = 'Total Saldo Aktif';
+    if(accountType === 'wd'){
+      if(wdFilter === 'kotor') cardTitle = 'Total Saldo WD Kotor';
+      else if(wdFilter === 'bersih') cardTitle = 'Total Saldo WD Bersih';
+      else cardTitle = 'Total Saldo WD';
+    } else if(accountType === 'kas'){
+      if(kasFilter === 'kotor') cardTitle = 'Total Saldo KAS Kotor';
+      else if(kasFilter === 'bersih') cardTitle = 'Total Saldo KAS Bersih';
+      else cardTitle = 'Total Saldo KAS';
+    }
+    document.getElementById('totalSaldoTitle').textContent = cardTitle;
 
     let filtered = allAccounts;
     if(accountType === 'wd'){
@@ -931,8 +1077,12 @@ async function render(){
       filtered = filtered.filter(a => a.accountType === 'KAS');
     }
 
-    if(wdFilter !== 'all'){
+    if(wdFilter !== 'all' && accountType === 'wd'){
       filtered = filtered.filter(a => a.wdType?.toLowerCase() === wdFilter);
+    }
+    
+    if(kasFilter !== 'all' && accountType === 'kas'){
+      filtered = filtered.filter(a => a.kasType?.toLowerCase() === kasFilter);
     }
 
     if(viewFilter === 'on'){
@@ -962,7 +1112,6 @@ async function render(){
     });
 
     const activeAccounts = allAccounts.filter(a => a.keterangan === 'ON');
-    const totalSaldo = activeAccounts.reduce((s,a)=>s+a.saldo, 0);
     const negativeAccounts = activeAccounts.filter(a=>a.saldo<0);
     const lowWdAccounts = activeAccounts.filter(a=>a.accountType==='WD' && a.saldo>0 && a.saldo<=2000000);
     const countNegative = negativeAccounts.length;
@@ -1065,7 +1214,10 @@ function renderKasTable(accounts){
   const tbody = document.getElementById('kasTableBody');
   tbody.innerHTML = '';
 
-  accounts.forEach(acc => {
+  // Sort by saldo descending (highest first)
+  const sorted = [...accounts].sort((a, b) => b.saldo - a.saldo);
+
+  sorted.forEach(acc => {
     const tr = document.createElement('tr');
     const isOff = acc.keterangan !== 'ON';
 
@@ -1077,11 +1229,16 @@ function renderKasTable(accounts){
       ? '<span class="pill success">✓ ON</span>'
       : '<span class="pill danger">✗ OFF</span>';
 
+    const kasTypePill = acc.kasType
+      ? `<span class="pill ${acc.kasType.toLowerCase()}">${acc.kasType}</span>`
+      : '-';
+
     tr.innerHTML = `
       <td><strong>${acc.nama}</strong></td>
       <td><strong style="font-family:'Exo 2',sans-serif">${fmtIDR(acc.saldo)}</strong></td>
       <td style="font-family:monospace;font-size:13px;color:var(--text-muted)">${acc.rekening || '-'}</td>
       <td>${statusPill}</td>
+      <td>${kasTypePill}</td>
       <td><button class="btn-edit" onclick="openEditModal('${acc.nama}')">✎ Edit</button></td>
     `;
 
@@ -1101,6 +1258,8 @@ document.getElementById('viewFilter').addEventListener('change', render);
 document.getElementById('alertClose').addEventListener('click', closeAlertModal);
 document.getElementById('alertCloseBtnFooter').addEventListener('click', closeAlertModal);
 document.getElementById('editClose').addEventListener('click', closeEditModal);
+document.getElementById('transferClose').addEventListener('click', closeTransferModal);
+document.getElementById('transferCloseBtnFooter').addEventListener('click', closeTransferModal);
 
 document.getElementById('alertModal').addEventListener('click', (e) => {
   if(e.target.id === 'alertModal') closeAlertModal();
@@ -1108,6 +1267,17 @@ document.getElementById('alertModal').addEventListener('click', (e) => {
 
 document.getElementById('editModal').addEventListener('click', (e) => {
   if(e.target.id === 'editModal') closeEditModal();
+});
+
+document.getElementById('transferModal').addEventListener('click', (e) => {
+  if(e.target.id === 'transferModal') closeTransferModal();
+});
+
+// Show transfer modal when WD filter changes
+document.getElementById('wdFilter').addEventListener('change', (e) => {
+  if(e.target.value !== 'all'){
+    openTransferModal(e.target.value.toUpperCase());
+  }
 });
 
 document.getElementById('editSaveBtn').addEventListener('click', () => {
