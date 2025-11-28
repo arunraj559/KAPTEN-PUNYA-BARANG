@@ -361,9 +361,9 @@
                         </div>
     
                         <select id="typeFilter" class="glass-select cursor-pointer">
-                            <option value="ALL"> Semua Rekening</option>
-                            <option value="WD"> Bank WD</option>
-                            <option value="KAS"> Bank KAS</option>
+                            <option value="ALL">📊 Semua Rekening</option>
+                            <option value="WD">💸 WD Saja</option>
+                            <option value="KAS">🏦 Bank KAS Saja</option>
                         </select>
     
                         <select id="categoryFilter" class="glass-select cursor-pointer">
@@ -723,7 +723,8 @@
                     // Array untuk menyimpan max tampung by index
                     let maxTampungByIndex = [];
                     
-                    for (let i = 0; i < values.length; i++) {
+                    // Skip header (row 0) - mulai dari i=1
+                    for (let i = 1; i < values.length; i++) {
                         if (values[i] && values[i][0]) {
                             const text = String(values[i][0]).trim().toUpperCase();
                             console.log(`Row ${i}: "${text}"`);
@@ -736,9 +737,13 @@
                             if (match) {
                                 amount = parseInt(match[1]) * 1000000;
                                 console.log(`✅ Parsed MAX pattern: ${text} → ${amount.toLocaleString('id-ID')}`);
+                            } else {
+                                console.log(`❌ No MAX pattern found in: "${text}"`);
                             }
                             
                             maxTampungByIndex.push(amount);
+                        } else {
+                            maxTampungByIndex.push(0);
                         }
                     }
                     
@@ -795,7 +800,7 @@
                         const statusUpper = rawStatus.toUpperCase();
                         const originalStatus = statusUpper === 'ON' ? 'ON' : (statusUpper === 'OFF' ? 'OFF' : 'OFF');
                         
-                        // Get max tampung by index dari Sheet G
+                        // Get max tampung by index dari Sheet G (i dimulai dari 1 untuk row 1, maxTampungData[0] adalah untuk row 1)
                         const maxTampung = Array.isArray(maxTampungData) ? (maxTampungData[i - 1] || 0) : 0;
                         newBanks.push({
                             id: `${i}-${nama}`,
@@ -937,7 +942,7 @@
                 data.forEach(b => {
                     const isLow = b.balance < 2e6 && b.balance > 0 && b.status === 'ON' && isWd;
                     const isNeg = b.balance < 0;
-                    const isOverMax = b.balance > b.maxTampung;
+                    const isOverMax = b.maxTampung > 0 && b.balance > b.maxTampung;
                     const r = document.createElement('tr');
                     
                     // Pre-calculate classes to avoid string concat overhead in loop
@@ -983,12 +988,13 @@
                         <td class="px-4 py-3 align-top">
                             <div class="font-bold text-sm ${nc} leading-tight">${b.name}${isLow ? ' ⚠️' : ''}${isNeg ? ' 💀' : ''}${isOverMax ? ' 🚨' : ''}</div>
                             <div class="text-xs text-[var(--text-muted)] font-mono mt-1">${b.accountNumber}</div>
+                            <div class="text-xs text-[var(--text-muted)] mt-1">${b.maxTampung > 0 ? 'max ' + fmtNum(b.maxTampung / 1000000) + ' juta' : ''}</div>
                             <div class="mt-2 flex gap-1">${catBadge} ${statusBadge}</div>
                         </td>
                         <td class="px-4 py-3 text-right align-middle">
                             <div class="font-mono font-bold text-sm ${bc}">${fmt(b.balance)}</div>
                         </td>
-                        ${isWd ? `<td class="px-4 py-3 text-right align-middle"><div class="font-mono text-sm text-[var(--text-muted)]">${fmtNum(b.fee)}</div></td><td class="px-4 py-3 text-center align-middle"><span class="pill ${b.status === 'ON' ? 'success' : 'danger'}">${b.status}</span></td>` : '<td class="px-4 py-3"></td>'}
+                        ${isWd ? `<td class="px-4 py-3 text-right align-middle"><div class="font-mono text-sm text-[var(--text-muted)]">${fmtNum(b.fee)}</div></td><td class="px-4 py-3 text-center align-middle"><span class="pill ${b.status === 'ON' ? 'success' : 'danger'}">${b.status}</span></td>` : '<td class="px-4 py-3"></td><td class="px-4 py-3"></td>'}
                         <td class="px-4 py-3 text-center align-middle">
                             <div class="flex gap-1 justify-center">
                                 ${transferBtn}
@@ -1086,12 +1092,12 @@
                 }
                 
                 // Jika saldo melebihi max tampung, suggest untuk normalisasi
-                if (wdBank.balance > wdBank.maxTampung) {
+                if (wdBank.maxTampung > 0 && wdBank.balance > wdBank.maxTampung) {
                     return wdBank.balance - wdBank.maxTampung;
                 }
                 
                 // Jika saldo antara 0-2 juta, suggest berapa bisa ditransfer
-                if (wdBank.balance < 2e6 && wdBank.balance > 0) {
+                if (wdBank.balance < 2e6 && wdBank.balance > 0 && wdBank.maxTampung > 0) {
                     return Math.max(0, wdBank.maxTampung - wdBank.balance);
                 }
                 
@@ -1158,12 +1164,12 @@
                         const hutang = Math.abs(wdBank.balance);
                         document.getElementById('suggestMaxTransferAmount').textContent = fmt(hutang) + ' (Bayar Hutang)';
                         suggestBox.style.display = 'block';
-                    } else if (wdBank.balance > wdBank.maxTampung) {
+                    } else if (wdBank.maxTampung > 0 && wdBank.balance > wdBank.maxTampung) {
                         // Saldo melebihi max tampung - suggest normalisasi
                         const overAmount = wdBank.balance - wdBank.maxTampung;
                         document.getElementById('suggestMaxTransferAmount').textContent = fmt(overAmount) + ' (Normalisasi)';
                         suggestBox.style.display = 'block';
-                    } else if (wdBank.balance < 2e6 && wdBank.balance > 0) {
+                    } else if (wdBank.balance < 2e6 && wdBank.balance > 0 && wdBank.maxTampung > 0) {
                         // Saldo 0-2 juta - suggest maximal transfer ke max tampung
                         const maxCanTransfer = Math.max(0, wdBank.maxTampung - wdBank.balance);
                         if (maxCanTransfer > 0) {
