@@ -679,6 +679,47 @@
             let selectedTransferKas = null;
             let selectedTransferWd = null;
             let searchTimeout; // For debouncing
+
+            // 💾 LocalStorage untuk persist filter
+            function saveFilters() {
+                localStorage.setItem('dashboardFilters', JSON.stringify(filters));
+            }
+            
+            function loadFilters() {
+                const saved = localStorage.getItem('dashboardFilters');
+                if (saved) {
+                    try {
+                        filters = JSON.parse(saved);
+                        document.getElementById('typeFilter').value = filters.type || 'ALL';
+                        document.getElementById('categoryFilter').value = filters.category || 'ALL';
+                        document.getElementById('statusFilter').value = filters.status || 'ALL';
+                    } catch(e) { console.error('Error loading filters:', e); }
+                }
+            }
+
+            // 💾 LocalStorage untuk persist PIN per rekening
+            function savePIN(bankId, pin) {
+                let pins = JSON.parse(localStorage.getItem('bankPINs') || '{}');
+                if (pin && pin.trim()) {
+                    pins[bankId] = pin;
+                } else {
+                    delete pins[bankId];
+                }
+                localStorage.setItem('bankPINs', JSON.stringify(pins));
+            }
+            
+            function loadPIN(bankId) {
+                const pins = JSON.parse(localStorage.getItem('bankPINs') || '{}');
+                return pins[bankId] || '';
+            }
+            
+            // Restore semua PIN ke banks array setelah fetchData
+            function restoreAllPINs() {
+                banks.forEach(b => {
+                    const savedPin = loadPIN(b.id);
+                    if (savedPin) b.pin = savedPin;
+                });
+            }
     
             const isStatusActive = (status) => {
                 return status && status.trim().toUpperCase() === 'ON';
@@ -817,6 +858,7 @@
                     }
                     
                     banks = newBanks;
+                    restoreAllPINs(); // Restore PIN dari localStorage
                     
                     // Use requestAnimationFrame to update UI without blocking main thread
                     requestAnimationFrame(() => {
@@ -986,7 +1028,7 @@
                     // Use template literal for content
                     r.innerHTML = `
                         <td class="px-4 py-3 align-top">
-                            <div class="font-bold text-sm ${nc} leading-tight">${b.name}${isLow ? ' ⚠️' : ''}${isNeg ? ' 💀' : ''}${isOverMax ? ' 🚨' : ''}</div>
+                            <div class="font-bold text-sm ${nc} leading-tight">${b.name}</div>
                             <div class="text-xs text-[var(--text-muted)] font-mono mt-1">${b.accountNumber}</div>
                             <div class="text-xs text-[var(--text-muted)] mt-1">${b.maxTampung > 0 ? 'max ' + fmtNum(b.maxTampung / 1000000) + ' juta' : ''}</div>
                             <div class="mt-2 flex gap-1">${catBadge} ${statusBadge}</div>
@@ -1041,9 +1083,9 @@
                 }, 300); // 300ms delay
             });
             
-            document.getElementById('typeFilter').addEventListener('change', e => { filters.type = e.target.value; updateUI(); });
-            document.getElementById('categoryFilter').addEventListener('change', e => { filters.category = e.target.value; updateUI(); });
-            document.getElementById('statusFilter').addEventListener('change', e => { filters.status = e.target.value; updateUI(); });
+            document.getElementById('typeFilter').addEventListener('change', e => { filters.type = e.target.value; saveFilters(); updateUI(); });
+            document.getElementById('categoryFilter').addEventListener('change', e => { filters.category = e.target.value; saveFilters(); updateUI(); });
+            document.getElementById('statusFilter').addEventListener('change', e => { filters.status = e.target.value; saveFilters(); updateUI(); });
     
             document.getElementById('transferNominal').addEventListener('input', e => {
                 const nominal = parseNumber(e.target.value);
@@ -1147,7 +1189,16 @@
                     document.getElementById('transferToAccount').value = '';
                 }
                 document.getElementById('transferNominal').value = '';
-                document.getElementById('transferPIN').value = kasData.pin && kasData.pin.trim() ? kasData.pin : '❌ BELUM ADA PIN';
+                
+                // 🔐 Load PIN langsung dari localStorage untuk memastikan selalu terbaru
+                const savedPin = loadPIN(kasData.id);
+                const displayPin = savedPin && savedPin.trim() ? savedPin : 'BELUM ADA PIN';
+                document.getElementById('transferPIN').value = displayPin;
+                if (!savedPin || !savedPin.trim()) {
+                    document.getElementById('transferPIN').style.color = '#ff4444';
+                } else {
+                    document.getElementById('transferPIN').style.color = '#ffd700';
+                }
                 document.getElementById('transferSummary').textContent = '-';
                 document.getElementById('exceedMaxBox').style.display = 'none';
                 
@@ -1241,13 +1292,14 @@
                     banks[idx].balance = Number(document.getElementById('editBalance').value);
                     banks[idx].status = document.getElementById('editStatus').value;
                     if (pin && !/^\d{6,10}$/.test(pin)) {
-                        alert('⚠️ PIN harus 6-10 digit angka atau kosongkan');
+                        alert('PIN harus 6-10 digit angka atau kosongkan');
                         return;
                     }
                     banks[idx].pin = pin || '';
+                    savePIN(id, pin); // Save PIN ke localStorage
                     updateUI();
                     closeModal('editModal');
-                    alert("✅ Perubahan disimpan (Lokal - Refresh akan mereset)" + (pin ? '\n📌 PIN tersimpan!' : ''));
+                    alert("Perubahan disimpan" + (pin ? '\nPIN tersimpan!' : ''));
                 }
             }
     
@@ -1323,6 +1375,7 @@
                 });
             }
     
+            loadFilters(); // Muat filter dari localStorage
             fetchData();
             setInterval(fetchData, 30000);
             lucide.createIcons();
