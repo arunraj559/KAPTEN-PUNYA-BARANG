@@ -30,6 +30,15 @@
             background: linear-gradient(135deg, #0a0e14 0%, #151921 100%);
             color: var(--text);
             min-height: 100vh;
+            /* Performance optimization for smoother rendering */
+            text-rendering: optimizeSpeed;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Use hardware acceleration for fixed elements */
+        header, .modal-overlay {
+            will-change: transform, opacity;
+            transform: translateZ(0);
         }
 
         .container-custom {
@@ -96,6 +105,8 @@
             padding: 24px;
             position: relative;
             overflow: hidden;
+            /* Improve scrolling performance */
+            contain: content;
         }
 
         .card-custom::before {
@@ -187,6 +198,8 @@
             max-width: 600px;
             width: 100%;
             animation: slideIn 0.3s ease-out;
+            /* Optimization */
+            will-change: transform, opacity;
         }
 
         @keyframes slideIn {
@@ -239,6 +252,52 @@
             background: rgba(34, 204, 136, 0.3);
             border-color: rgba(34, 204, 136, 0.5);
         }
+
+        .attention-btn {
+            position: relative;
+            border: 1px solid rgba(255, 68, 68, 0.5);
+            background: rgba(255, 68, 68, 0.1);
+            color: var(--danger);
+            padding: 8px 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .attention-btn:hover {
+            background: rgba(255, 68, 68, 0.2);
+        }
+
+        .attention-btn.disabled {
+            opacity: 0.5;
+            filter: grayscale(1);
+            cursor: not-allowed;
+        }
+
+        .attention-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--danger);
+            color: black;
+            font-size: 10px;
+            font-weight: bold;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Optimization: Use CSS containment for tables to prevent full re-layouts */
+        .overflow-x-auto {
+            contain: layout paint style;
+        }
     </style>
 </head>
 <body class="pb-20">
@@ -255,8 +314,17 @@
                 </div>
                 
                 <div class="flex flex-wrap gap-2 items-center w-full md:w-auto">
+                    
+                    <!-- Added Attention Button -->
+                    <button id="attentionBtn" class="attention-btn disabled" onclick="showCriticalList()">
+                        <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                        <span class="hidden sm:inline">Attention Needed</span>
+                        <span id="attentionCount" class="attention-badge hidden">0</span>
+                    </button>
+
                     <div class="relative flex-grow md:flex-grow-0">
                         <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] w-4 h-4"></i>
+                        <!-- Debounced search input for better performance -->
                         <input type="text" id="searchInput" placeholder="Cari..." class="glass-input pl-9 w-full md:w-48">
                     </div>
 
@@ -327,6 +395,7 @@
                         <span class="pill" style="border-color: var(--gold); color: var(--gold); background: rgba(255,215,0,0.1);" id="wdCount">0 Items</span>
                     </div>
                     <div class="overflow-x-auto max-h-[800px]">
+                        <!-- Optimization: Use a document fragment for efficient DOM updates -->
                         <table class="w-full text-left border-collapse text-sm">
                             <thead class="sticky top-0 bg-[#13171e] z-10">
                                 <tr>
@@ -368,6 +437,7 @@
         </div>
     </div>
 
+    <!-- Modals -->
     <div id="emptyBalanceModal" class="modal-overlay" style="z-index: 70;">
         <div class="modal-content" style="border-color: var(--danger); text-align: center;">
             <div class="w-20 h-20 rounded-full bg-[rgba(255,68,68,0.2)] flex items-center justify-center mx-auto mb-6" style="animation: pulse 2s infinite;">
@@ -509,6 +579,7 @@
         let filters = { type: 'ALL', category: 'ALL', status: 'ALL', search: '' };
         let selectedTransferKas = null;
         let selectedTransferWd = null;
+        let searchTimeout; // For debouncing
 
         const isStatusActive = (status) => {
             return status && status.trim().toUpperCase() === 'ON';
@@ -534,6 +605,7 @@
             });
         }
 
+        // Optimization: Use requestAnimationFrame for smoother UI updates
         async function fetchData() {
             const ic = document.getElementById('refreshIcon');
             ic.classList.add('animate-spin');
@@ -548,6 +620,9 @@
                 const values = json.values || [];
                 const newBanks = [];
 
+                // Optimization: Pre-allocate array if possible or just push efficiently
+                // Batch processing logic could be added here if dataset > 1000 rows
+                
                 for (let i = 1; i < values.length; i++) {
                     const row = values[i];
                     if (!row || !row[0]) continue;
@@ -587,21 +662,33 @@
                         fee: parseNumber(row[4])
                     });
                 }
+                
                 banks = newBanks;
-                updateUI();
-                checkCriticals();
-                checkEmptyBalancePopup();
-                document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-[var(--success)]';
-                document.getElementById('status-text').textContent = `Live • Updated: ${new Date().toLocaleTimeString()}`;
+                
+                // Use requestAnimationFrame to update UI without blocking main thread
+                requestAnimationFrame(() => {
+                    updateUI();
+                    document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-[var(--success)]';
+                    document.getElementById('status-text').textContent = `Live • Updated: ${new Date().toLocaleTimeString()}`;
+                    ic.classList.remove('animate-spin');
+                });
+                
             } catch (err) {
                 console.error(err);
                 alert("Gagal mengambil data");
-            } finally {
                 ic.classList.remove('animate-spin');
             }
         }
 
         function updateUI() {
+            // Optimization: Cache DOM elements
+            const wdTableBody = document.getElementById('wdTableBody');
+            const kasTableBody = document.getElementById('kasTableBody');
+            
+            // Clear existing content first
+            wdTableBody.innerHTML = '';
+            kasTableBody.innerHTML = '';
+
             let filtered = banks.filter(b => {
                 if (filters.search && !b.name.toLowerCase().includes(filters.search) && !b.accountNumber.includes(filters.search)) return false;
                 if (filters.type === 'WD' && b.type !== 'WD') return false;
@@ -618,35 +705,84 @@
                 if (a.status === 'ON' && b.status === 'OFF') return -1; if (a.status === 'OFF' && b.status === 'ON') return 1;
                 return 0;
             });
-            const wd = filtered.filter(b => b.type === 'WD'), kas = filtered.filter(b => b.type === 'KAS');
-            const total = filtered.filter(b => b.status === 'ON').reduce((a, b) => a + b.balance, 0);
-            const neg = banks.filter(b => b.balance < 0).length;
-            const low = banks.filter(b => b.type === 'WD' && b.balance > 0 && b.balance <= 2e6 && b.status === 'ON').length;
-            const act = banks.filter(b => b.status === 'ON').length;
+            
+            const wd = filtered.filter(b => b.type === 'WD');
+            const kas = filtered.filter(b => b.type === 'KAS');
 
+            // --- NEW: Sort KAS by Lowest Balance First ---
+            kas.sort((a, b) => a.balance - b.balance);
+            // --------------------------------------------
+            
+            // Calculate stats efficiently
+            let total = 0, neg = 0, low = 0, act = 0;
+            // Single pass for global stats
+            for(const b of banks) {
+                if(b.status === 'ON') total += b.balance; // Wait, this total logic in original code filtered by 'filtered' or 'banks'? Original used 'filtered' for total but 'banks' for counts.
+                // Checking original code: total used `filtered`, others used `banks`
+                if(b.balance < 0) neg++;
+                if(b.type === 'WD' && b.balance > 0 && b.balance <= 2e6 && b.status === 'ON') low++;
+                if(b.status === 'ON') act++;
+            }
+            
+            // Recalculate total based on filtered view to match original logic exactly if that was intended, 
+            // OR fix it to be consistent. Original: `const total = filtered.filter...`
+            // Let's stick to original logic: Total depends on VIEW, Counts depend on DATA
+            total = filtered.filter(b => b.status === 'ON').reduce((a, b) => a + b.balance, 0);
+            
+            // Update Attention Button Status
+            // Calculate criticals from ALL banks, not just filtered
+            const criticalCount = banks.filter(b => b.balance < 0 || (b.type === 'WD' && b.balance <= 2e6 && b.balance > 0 && b.status === 'ON')).length;
+            const attBtn = document.getElementById('attentionBtn');
+            const attCount = document.getElementById('attentionCount');
+            
+            if (criticalCount > 0) {
+                attBtn.classList.remove('disabled');
+                attCount.textContent = criticalCount;
+                attCount.classList.remove('hidden');
+                attBtn.classList.add('animate-pulse');
+            } else {
+                attBtn.classList.add('disabled');
+                attCount.classList.add('hidden');
+                attBtn.classList.remove('animate-pulse');
+            }
+
+            // Batch DOM updates
             document.getElementById('totalSaldo').textContent = fmt(total);
             document.getElementById('countNegative').textContent = neg;
             document.getElementById('countLow').textContent = low;
             document.getElementById('countActive').textContent = act;
-            document.getElementById('cardNegative').classList.toggle('hidden', neg === 0);
+            
+            const cardNeg = document.getElementById('cardNegative');
+            if (neg === 0) cardNeg.classList.add('hidden'); else cardNeg.classList.remove('hidden');
+            
             document.getElementById('cardLow').style.display = low > 0 ? 'block' : 'none';
             document.getElementById('wdCount').textContent = `${wd.length} Items`;
             document.getElementById('kasCount').textContent = `${kas.length} Items`;
             document.getElementById('wdTableCard').style.display = filters.type === 'ALL' || filters.type === 'WD' ? 'block' : 'none';
             document.getElementById('kasTableCard').style.display = filters.type === 'ALL' || filters.type === 'KAS' ? 'block' : 'none';
-            renderTable('wdTableBody', wd, true);
-            renderTable('kasTableBody', kas, false);
+            
+            // Render tables using DocumentFragment for performance
+            renderTableEfficiently(wdTableBody, wd, true);
+            renderTableEfficiently(kasTableBody, kas, false);
+            
             lucide.createIcons();
         }
 
-        function renderTable(id, data, isWd) {
-            const t = document.getElementById(id);
-            t.innerHTML = '';
+        // Optimization: Use DocumentFragment
+        function renderTableEfficiently(tbody, data, isWd) {
+            const fragment = document.createDocumentFragment();
+            
             data.forEach(b => {
                 const isLow = b.balance <= 2e6 && b.balance > 0 && b.status === 'ON' && isWd;
                 const isNeg = b.balance < 0;
                 const r = document.createElement('tr');
-                r.className = `border-b border-dashed border-[rgba(255,215,0,0.1)] ${b.status === 'OFF' ? 'opacity-50 grayscale' : ''} ${isLow || isNeg ? 'bg-[rgba(255,68,68,0.1)] border-l-4 border-l-[var(--danger)]' : ''}`;
+                
+                // Pre-calculate classes to avoid string concat overhead in loop
+                let rowClass = 'border-b border-dashed border-[rgba(255,215,0,0.1)]';
+                if (b.status === 'OFF') rowClass += ' opacity-50 grayscale';
+                if (isLow || isNeg) rowClass += ' bg-[rgba(255,68,68,0.1)] border-l-4 border-l-[var(--danger)]';
+                r.className = rowClass;
+                
                 const nc = (isLow || isNeg) ? 'text-[var(--danger)]' : 'text-[var(--text)]';
                 const bc = (isLow || isNeg) ? 'text-[var(--danger)]' : (b.type === 'WD' ? 'text-[var(--gold)]' : 'text-[var(--accent)]');
                 
@@ -659,42 +795,62 @@
                     : '<span class="pill danger">OFF</span>';
                 
                 const transferBtn = isLow ? `<button onclick='startTransferFromWd("${b.id}")' class="p-2 hover:bg-[rgba(34,204,136,0.2)] text-[var(--success)] rounded transition" title="Transfer"><i data-lucide="arrow-right-left" class="w-4 h-4"></i></button>` : '';
-                r.innerHTML = `<td class="p-4"><div class="font-bold text-sm ${nc}">${b.name}${isLow ? ' ⚠' : ''}</div><div class="text-xs text-[var(--text-muted)] font-mono mt-1">${b.accountNumber}</div><div style="margin-top: 4px;">${catBadge} ${statusBadge}</div></td><td class="p-4 text-right"><div class="font-mono font-bold text-sm ${bc}">${fmt(b.balance)}</div></td>${isWd ? `<td class="p-4 text-right"><div class="font-mono text-sm text-[var(--text-muted)]">${fmt(b.fee)}</div></td><td class="p-4 text-center">${statusBadge}</td>` : '<td class="p-4"></td>'}<td class="p-4 text-right flex gap-1 justify-end">${transferBtn}<button onclick='openEdit("${b.id}")' class="p-2 hover:bg-[rgba(255,255,255,0.1)] text-[var(--accent)] rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button></td>`;
-                t.appendChild(r);
+                
+                // Use template literal for content
+                r.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold text-sm ${nc}">${b.name}${isLow ? ' ⚠' : ''}</div>
+                        <div class="text-xs text-[var(--text-muted)] font-mono mt-1">${b.accountNumber}</div>
+                        <div style="margin-top: 4px;">${catBadge} ${statusBadge}</div>
+                    </td>
+                    <td class="p-4 text-right">
+                        <div class="font-mono font-bold text-sm ${bc}">${fmt(b.balance)}</div>
+                    </td>
+                    ${isWd ? `<td class="p-4 text-right"><div class="font-mono text-sm text-[var(--text-muted)]">${fmt(b.fee)}</div></td><td class="p-4 text-center">${statusBadge}</td>` : '<td class="p-4"></td>'}
+                    <td class="p-4 text-right flex gap-1 justify-end">
+                        ${transferBtn}
+                        <button onclick='openEdit("${b.id}")' class="p-2 hover:bg-[rgba(255,255,255,0.1)] text-[var(--accent)] rounded">
+                            <i data-lucide="edit-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>`;
+                fragment.appendChild(r);
             });
+            
+            tbody.appendChild(fragment);
         }
 
-        function checkCriticals() {
-            const c = banks.filter(b => b.balance < 0 || (b.type === 'WD' && b.balance <= 2e6 && b.balance > 0 && b.status === 'ON'));
-            if (c.length > 0) {
-                const l = document.getElementById('criticalList');
-                l.innerHTML = '';
-                c.forEach(a => {
-                    const d = document.createElement('div');
-                    d.className = 'flex justify-between items-center p-4 rounded bg-[rgba(255,68,68,0.1)] border-l-4 border-[var(--danger)]';
-                    d.innerHTML = `<div><div class="font-bold text-[var(--danger)]">${a.name}</div><div class="text-xs text-[var(--text-muted)]">${a.accountNumber}</div></div><div class="text-lg font-bold text-[var(--danger)] font-mono">${fmt(a.balance)}</div>`;
-                    l.appendChild(d);
-                });
-                openModal('criticalModal');
-            }
+        // Updated to be triggered manually
+        function showCriticalList() {
+            const criticalItems = banks.filter(b => b.balance < 0 || (b.type === 'WD' && b.balance <= 2e6 && b.balance > 0 && b.status === 'ON'));
+            if (criticalItems.length === 0) return;
+
+            const l = document.getElementById('criticalList');
+            l.innerHTML = '';
+            
+            const fragment = document.createDocumentFragment();
+            criticalItems.forEach(a => {
+                const d = document.createElement('div');
+                d.className = 'flex justify-between items-center p-4 rounded bg-[rgba(255,68,68,0.1)] border-l-4 border-[var(--danger)]';
+                d.innerHTML = `<div><div class="font-bold text-[var(--danger)]">${a.name}</div><div class="text-xs text-[var(--text-muted)]">${a.accountNumber}</div></div><div class="text-lg font-bold text-[var(--danger)] font-mono">${fmt(a.balance)}</div>`;
+                fragment.appendChild(d);
+            });
+            l.appendChild(fragment);
+            openModal('criticalModal');
         }
 
         function checkEmptyBalancePopup() {
-            const total = banks.filter(b => {
-                if (filters.search && !b.name.toLowerCase().includes(filters.search) && !b.accountNumber.includes(filters.search)) return false;
-                if (filters.type === 'WD' && b.type !== 'WD') return false;
-                if (filters.type === 'KAS' && b.type !== 'KAS') return false;
-                if (filters.category !== 'ALL' && b.category !== filters.category) return false;
-                if (filters.status !== 'ALL' && b.status !== filters.status) return false;
-                return true;
-            }).filter(b => b.status === 'ON').reduce((a, b) => a + b.balance, 0);
-            
-            if (total <= 0 && (filters.type !== 'ALL' || filters.category !== 'ALL' || filters.status !== 'ALL')) {
-                openModal('emptyBalanceModal');
-            }
+            // Function kept but call removed to prevent popup
         }
 
-        document.getElementById('searchInput').addEventListener('input', e => { filters.search = e.target.value.toLowerCase(); updateUI(); });
+        // Optimization: Debounce search input
+        document.getElementById('searchInput').addEventListener('input', e => { 
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                filters.search = e.target.value.toLowerCase(); 
+                updateUI(); 
+            }, 300); // 300ms delay
+        });
+        
         document.getElementById('typeFilter').addEventListener('change', e => { filters.type = e.target.value; updateUI(); });
         document.getElementById('categoryFilter').addEventListener('change', e => { filters.category = e.target.value; updateUI(); });
         document.getElementById('statusFilter').addEventListener('change', e => { filters.status = e.target.value; updateUI(); });
@@ -723,13 +879,16 @@
             const title = document.querySelector('#transferMenuModal .text-xl');
             const categoryLabel = wdBank.category === 'KOTOR' ? 'KOTOR' : 'BERSIH';
             if (title) title.innerHTML = `<i data-lucide="arrow-right-left" class="w-6 h-6"></i> PILIH KAS ${categoryLabel} UNTUK TRANSFER`;
+            
+            const fragment = document.createDocumentFragment();
             banks.filter(b => b.type === 'KAS' && b.status === 'ON' && b.category === wdBank.category).sort((a, b) => b.balance - a.balance).forEach(a => {
                 const d = document.createElement('div');
                 d.className = 'flex justify-between items-center p-4 rounded bg-[rgba(34,204,136,0.05)] border border-[rgba(34,204,136,0.2)] hover:bg-[rgba(34,204,136,0.1)] cursor-pointer transition';
                 d.innerHTML = `<div><div class="font-bold text-[var(--text)]">${a.name}</div><div class="text-xs text-[var(--text-muted)] font-mono">${a.accountNumber}</div></div><div class="text-lg font-bold text-[var(--success)] font-mono">${fmt(a.balance)}</div>`;
                 d.onclick = () => openTransferForm(a, wdBank);
-                l.appendChild(d);
+                fragment.appendChild(d);
             });
+            l.appendChild(fragment);
             lucide.createIcons();
             openModal('transferMenuModal');
         }
